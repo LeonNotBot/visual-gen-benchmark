@@ -1,0 +1,9 @@
+{
+  "_comment": "文生图：ComfyUI + Qwen-Image 2.1；地址从环境变量 EVAL_COMFY_URL 读，或在此指定 comfyui_url",
+  "id": "qwen_image_2_1",
+  "name": "Qwen-Image 2.1",
+  "task_types": ["文生图"],
+  "platform": "comfyui",
+  "workflow_template": "comfy_templates/qwen_image_2_1_t2i_api.json",
+  "megapixels": 0.92
+}

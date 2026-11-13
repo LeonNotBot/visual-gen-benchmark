@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# 评测运行数据（执行机本地生成，不跟踪）
+runs/
+testset/outputs/
+testset/备份/
+
+# 凭据（敏感信息，不上传）
+testset/_凭据/
+_凭据/
+
+# 提示词拆解助手的本地数据和配置（含 API key）
+_lib/data/
+_lib/logs/
+_lib/config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时文件
+*.tmp
+*.log
+~$*

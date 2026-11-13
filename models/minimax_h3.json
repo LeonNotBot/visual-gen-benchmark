@@ -1,0 +1,8 @@
+{
+  "_comment": "文生视频 / 首帧生视频 / 首尾帧生视频：MiniMax H3；地址从环境变量 EVAL_PGX_URL 读，或在此指定 pgx_h3_url",
+  "id": "minimax_h3",
+  "name": "MiniMax H3",
+  "task_types": ["文生视频", "首帧生视频", "首尾帧生视频"],
+  "platform": "pgx_h3",
+  "default_resolution": "720p"
+}
