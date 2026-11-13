@@ -131,22 +131,70 @@ python run_bench.py --file testset/提示词测试集.xlsx --out runs/new_model 
 ## 目录结构
 
 ```
-├─ run_bench.py           主入口（优化→生成→拆解→预填评测表）
-├─ auto_optimize.py       提示词优化
-├─ auto_generate.py       批量生成图片/视频
-├─ auto_decompose.py      要求拆解
-├─ report.py              评测报告生成
-├─ _lib/                  提示词优化库
-├─ models/                模型配置
-├─ comfy_templates/       ComfyUI 工作流模板
-├─ testset/               测试集和参考图
-│   ├─ 提示词测试集.xlsx
-│   ├─ 参考图/
-│   ├─ 评测记录/          共享评测表目录
-│   └─ 报告样例/          示例报告和结果文件
-├─ docs/                  文档
-│   └─ 评测体系_v1.5.xlsx
-└─ tests/                 自动化测试
+visual-gen-benchmark/
+│
+├─ run_bench.py              ← 主入口：一条命令完成完整评测流程
+├─ auto_optimize.py          提示词优化（调大模型改写）
+├─ auto_generate.py          批量生成图片/视频
+├─ auto_decompose.py         要求拆解（从提示词拆出评测要求）
+├─ report.py                 读取评测记录，生成 Markdown 报告
+├─ build_prompt_testset.py   工具：从零构建提示词测试集模板
+│
+├─ models/                   模型配置目录
+│   ├─ qwen_image_2_1.json   ComfyUI 图片模型示例
+│   ├─ minimax_h3.json       pgx-h3 视频模型示例
+│   └─ README.md             字段说明和新模型接入方式
+│
+├─ comfy_templates/          ComfyUI 工作流模板（.json）
+│
+├─ _lib/                     提示词优化库（auto_optimize 的依赖）
+│   ├─ optimize.py           视频提示词优化逻辑（MiniMax H3 格式）
+│   ├─ optimize_img.py       图片提示词优化逻辑（Qwen-Image 格式）
+│   ├─ llm.py                大模型调用封装（OpenAI 兼容接口）
+│   ├─ store.py              配置读写（_lib/config.json）
+│   ├─ export.py             拆解结果导出到 Excel
+│   ├─ rules.py              从评测体系 Excel 读取维度规则
+│   ├─ server.py             拆解助手的本地 Web 服务（内部工具）
+│   ├─ h3_skill/             视频提示词优化技能（MiniMax H3）
+│   └─ qwen_image_skill/     图片提示词优化技能（Qwen-Image）
+│
+├─ testset/                  示例测试集（可替换为自己的）
+│   ├─ 提示词测试集.xlsx      3 条示例用例（IMG-01、VID-01、VID-02）
+│   ├─ 参考图/               首帧生视频用的参考图
+│   ├─ 评测记录/             拆解好的评测表（auto_decompose 生成）
+│   └─ 报告样例/             示例生成结果和真实填写的评测表
+│
+├─ docs/
+│   └─ 评测体系_v1.5.xlsx    评测体系主模板（评测维度和评分规则）
+│
+├─ tests/                    自动化测试（不依赖真实平台，用假服务器）
+│   ├─ test_auto_optimize.py
+│   ├─ test_auto_generate.py
+│   └─ test_auto_generate_video.py
+│
+├─ 一键评测.bat              Windows 快捷启动（双击运行完整流程）
+├─ 自动生成.bat              只运行生成步骤
+├─ 自动优化提示词.bat        只运行优化步骤
+├─ 自动拆解.bat              只运行拆解步骤
+├─ 启动文件服务.bat          手动启动 HTTP 文件服务（临时）
+├─ 安装文件服务.bat          注册开机自启的文件服务（需管理员）
+├─ 卸载文件服务.bat          卸载文件服务
+└─ 文件服务.ps1              文件服务的 PowerShell 实现
+```
+
+**入口文件**：`run_bench.py`，其他 `auto_*.py` 也可单独调用。
+
+**运行结果**默认存在 `runs/` 目录下（已在 .gitignore 中排除）：
+```
+runs/
+└─ run_20261110/
+    ├─ status.json        进度
+    ├─ 生成情况.md         结果摘要
+    ├─ 评测记录.xlsx       评测表（②表最后一列有结果文件超链接）
+    ├─ report.md          评测报告
+    └─ outputs/
+        ├─ qwen_image_2_1/   图片结果
+        └─ minimax_h3/       视频结果
 ```
 
 ---
