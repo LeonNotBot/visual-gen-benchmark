@@ -1,0 +1,34 @@
+{
+  "targets": [
+    {
+      "id": "video-creator-mock",
+      "script": "run_bench.py",
+      "sha256": "176abbd60404549c4cad0c2fb8ef1c357a0a62b4477ab1c070d06db565eed6cd",
+      "benchmarks": [
+        "smoke"
+      ],
+      "result_mode": "report",
+      "report_file": "report.md",
+      "timeout_seconds": 120,
+      "argument_template": [
+        "--mock-test",
+        "--out",
+        "{output_dir}",
+        "--progress-file",
+        "{progress_file}"
+      ],
+      "argument_mode": "allowlist",
+      "allowed_arguments": [
+        "--ids",
+        "--tags"
+      ],
+      "review_script": "report.py",
+      "review_sha256": "948faf43c34945beb902836f2554e418e014d4e743cdee79592ffdc88f666436",
+      "review_argument_template": [
+        "--mock-test",
+        "--eval",
+        "{input_file}"
+      ]
+    }
+  ]
+}

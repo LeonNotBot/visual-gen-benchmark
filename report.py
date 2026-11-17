@@ -183,6 +183,7 @@ def main():
     ap.add_argument("--eval", required=True, help="填好的评测记录 Excel 路径")
     ap.add_argument("--out", default="", help="输出目录（默认：评测记录所在的目录）")
     ap.add_argument("--status", default="", help="status.json 路径（可选，用于补充运行信息）")
+    ap.add_argument("--mock-test", action="store_true", help="联调模式：汇总人工填写结果，不依赖 Excel 公式缓存，不计算真实业务得分")
     a = ap.parse_args()
 
     eval_path = Path(a.eval).resolve()
@@ -196,15 +197,24 @@ def main():
     except SystemExit as e:
         sys.exit(str(e))
 
-    if not summaries:
+    if a.mock_test:
+        from mock_bench import build_review_report
+        try:
+            md = build_review_report(records, eval_path)
+        except ValueError as exc:
+            sys.exit(str(exc))
+    elif not summaries:
         sys.exit("③表里没有有效的样本结论（公式值为空，或都是待复核）。"
                  "请先在 Excel 里填完②表并保存，再运行本脚本。")
+    else:
+        print(f"读取成功：{len(summaries)} 个样本有结论，{len(records)} 行评测记录。", flush=True)
+        md = build_report(records, summaries, eval_path, a.status or None)
 
-    print(f"读取成功：{len(summaries)} 个样本有结论，{len(records)} 行评测记录。", flush=True)
-    md = build_report(records, summaries, eval_path, a.status or None)
-
+    out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "report.md"
     out.write_text(md, encoding="utf-8")
+    if a.mock_test:
+        (out_dir / "review.required").unlink(missing_ok=True)
     print(f"✅ 报告已生成：{out}")
     print(f"   接下来把 report.md + 评测记录.xlsx 上传到 评测平台。")
 
