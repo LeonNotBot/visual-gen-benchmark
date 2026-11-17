@@ -387,8 +387,16 @@ def main():
 
     # ── 阶段 1：优化（写回原测试集，所有模型共用同一份优化后提示词）──
     if not a.skip_optimize:
-        log("\n── 阶段 1/3：优化提示词 ──")
+        log("\n── 阶段 1/4：优化提示词 ──")
         run_script("auto_optimize.py", ["--file", str(src)] + ids_arg)
+
+    # ── 阶段 2：拆解（新增用例追加到已有评测记录，已确认的跳过）──
+    if not a.skip_decompose:
+        log("\n── 阶段 2/4：拆解评测要求 ──")
+        dec_args = ["--file", str(src), "--append-to-latest"] + ids_arg
+        rc = run_script("auto_decompose.py", dec_args)
+        if rc != 0:
+            log("⚠ 拆解阶段未完全成功，评测记录可能不完整（可能缺少大模型配置）")
 
     # ── 准备工作副本：第一次运行时从原测试集复制，续跑时沿用 ──
     if not work.exists():
@@ -400,9 +408,9 @@ def main():
     path = work
     file_arg = ["--file", str(path)]
 
-    # ── 阶段 2：生成（每条完成时更新进度文件）──────────────────
+    # ── 阶段 3：生成（每条完成时更新进度文件）──────────────────
     if not a.skip_generate:
-        log("\n── 阶段 2/3：生成图片/视频 ──")
+        log("\n── 阶段 3/4：生成图片/视频 ──")
         env = {"EVAL_STATUS_FILE": str(status_path),
                "EVAL_CRED_DIR": str(src.parent / "_凭据"),
                "EVAL_RUN_ID": out_dir.name}  # 幂等键包含运行ID，避免跨运行复用旧任务
@@ -450,15 +458,18 @@ def main():
     build_report(cases, out_dir, src.name, int(time.time() - t_start), models)
     log(f"\n生成情况报告已写入 {out_dir / '生成情况.md'}")
 
-    # ── 阶段 3：复制共享评测表到运行目录，添加结果文件列 ──
+    # ── 阶段 4：复制共享评测表到运行目录，添加结果文件列 ──
     if not a.skip_decompose:
-        log("\n── 阶段 3/3：准备评测表 ──")
+        log("\n── 阶段 4/4：准备评测表 ──")
         # 评测表属于测试集，所有模型共用一份，从源测试集旁边的 评测记录/ 目录复制
         eval_dir = src.parent / "评测记录"
         dest_eval = out_dir / "评测记录.xlsx"
         if not dest_eval.exists():
             if eval_dir.exists():
-                latest = sorted(eval_dir.glob("评测记录_*.xlsx"))
+                # 按修改时间排序，确保追加后仍能拿到最新的文件
+                candidates = [f for f in eval_dir.glob("评测记录_*.xlsx")
+                              if not (f.parent / f"~${f.name}").exists()]
+                latest = sorted(candidates, key=lambda f: f.stat().st_mtime)
                 if latest:
                     shutil.copy2(latest[-1], dest_eval)
                     log(f"已复制共享评测表到 {dest_eval}")
