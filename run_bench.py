@@ -312,6 +312,8 @@ def main():
     ap = argparse.ArgumentParser(description="评测主入口：优化→生成→拆解→预填评测表")
     ap.add_argument("--file", default=str(DEFAULT_FILE), help="提示词测试集 Excel 路径")
     ap.add_argument("--out", required=True, help="运行输出目录")
+    ap.add_argument("--mock-test", action="store_true", help="仅生成联调模拟产物，不调用模型或生成平台")
+    ap.add_argument("--progress-file", help="Mock 模式下提供给 Bridge 的进度 JSON 路径")
     ap.add_argument("--ids", default="", help="只跑这些用例ID，逗号分隔")
     ap.add_argument("--tags", default="", help="只跑包含这些标签的用例，逗号分隔（标签在「备注」列，分号隔开）")
     ap.add_argument("--timeout", type=int, default=1800, help="生成阶段最多等多少秒（默认 1800）")
@@ -321,6 +323,17 @@ def main():
     ap.add_argument("--skip-generate", action="store_true", help="跳过生成步骤（用于只重新拆解）")
     ap.add_argument("--skip-decompose", action="store_true", help="跳过拆解步骤（用于只生成）")
     a = ap.parse_args()
+
+    # Branch before model configuration, source edits, or any real subprocess.
+    if a.mock_test:
+        from mock_bench import run_mock
+        try:
+            run_mock(a)
+        except (ValueError, OSError) as exc:
+            ap.exit(2, f"Mock 启动失败：{exc}\n")
+        return
+    if a.progress_file:
+        ap.error("--progress-file 目前仅用于 --mock-test")
 
     path = Path(a.file).resolve()
     if not path.exists():
