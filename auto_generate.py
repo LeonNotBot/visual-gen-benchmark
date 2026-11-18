@@ -30,6 +30,9 @@ from pathlib import Path
 import openpyxl
 
 ROOT = Path(__file__).resolve().parent
+# The parent starts this script with -I; explicitly import trusted sibling code.
+sys.path.insert(0, str(ROOT))
+from bench_diagnostics import add_arguments, configure, emit, http_timeout, trace_http
 DEFAULT_FILE = ROOT / "testset" / "提示词测试集.xlsx"
 MODELS_DIR_CANDIDATES = [Path(__file__).resolve().parent / "models"]   # 和脚本放在一起，scripts\ 和 eval-bench\ 都一样
 T2I_TEMPLATE_DEFAULT = Path(__file__).resolve().parent / "comfy_templates" / "qwen_image_2_1_t2i_api.json"
@@ -58,11 +61,15 @@ def no_proxy():
 
 
 def http_raw(method, url, body=None, timeout=30):
+    timeout = http_timeout(timeout)
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(url, data, {"Content-Type": "application/json"} if data else {}, method=method)
     try:
-        with no_proxy().open(req, timeout=timeout) as r:
-            return r.read()
+        with trace_http(method, url, timeout) as event:
+            with no_proxy().open(req, timeout=timeout) as r:
+                content = r.read()
+                event.update(status=r.status, bytes=len(content))
+                return content
     except urllib.error.HTTPError as e:
         raise GenError(f"平台返回 {e.code}：{e.read().decode('utf-8', 'replace')[:300]}")
     except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -240,6 +247,7 @@ class Pgx:
         self.ready = False
 
     def _req(self, method, path, data=None, ctype=None, headers=None, timeout=30, raw=False):
+        timeout = http_timeout(timeout)
         h = dict(headers or {})
         if method in ("POST", "DELETE"):
             h["Origin"] = self.base
@@ -247,8 +255,10 @@ class Pgx:
             h["Content-Type"] = ctype
         req = urllib.request.Request(self.base + path, data, h, method=method)
         try:
-            with self.op.open(req, timeout=timeout) as resp:
-                body = resp.read()
+            with trace_http(method, self.base + path, timeout) as event:
+                with self.op.open(req, timeout=timeout) as resp:
+                    body = resp.read()
+                    event.update(status=resp.status, bytes=len(body))
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:200]
             try:
@@ -387,7 +397,11 @@ def main():
     ap.add_argument("--ids", default="", help="只处理这些用例ID，逗号分隔")
     ap.add_argument("--timeout", type=int, default=900, help="最多等多少秒")
     ap.add_argument("--interval", type=float, default=5, help="查询进度的间隔秒数")
+    add_arguments(ap, poll=False)
     a = ap.parse_args()
+    configure(a)
+    emit("GENERATION_START", input=str(Path(a.file).resolve()), run_id=os.environ.get("EVAL_RUN_ID", "local"),
+         timeout_seconds=a.timeout, poll_interval_seconds=a.interval)
 
     path = Path(a.file).resolve()
     only = {x.strip() for x in a.ids.split(",") if x.strip()}
@@ -493,6 +507,7 @@ def main():
             if job and job.get("提示词指纹") == h and job.get("状态") == "生成中":
                 print(f"{cid}：上次已提交（任务号 {job['任务号']}），接着等")
             else:
+                emit("SUBMIT_START", case=cid, platform=platform, model=cfg.get("id", ""), run_id=run_id)
                 if platform == "comfyui":
                     job = comfy_submit_case(row, cid, cfg)
                     note = f"seed {job['seed']}，模型 {cfg.get('name', '')}"
@@ -518,7 +533,12 @@ def main():
     # 第二步：等结果、下载
     deadline = time.time() + a.timeout
     last_msg = {}
+    last_heartbeat = 0.0
     while waiting and time.time() < deadline:
+        if time.monotonic() - last_heartbeat >= a.heartbeat_interval:
+            emit("GENERATION_WAIT", pending=",".join(cid for _, cid, _ in waiting),
+                 remaining_seconds=max(0, int(deadline - time.time())))
+            last_heartbeat = time.monotonic()
         for r, cid, cfg in list(waiting):
             job = jobs[cid]
             platform = job.get("平台", "ComfyUI")

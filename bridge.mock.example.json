@@ -3,7 +3,7 @@
     {
       "id": "video-creator-mock",
       "script": "run_bench.py",
-      "sha256": "176abbd60404549c4cad0c2fb8ef1c357a0a62b4477ab1c070d06db565eed6cd",
+      "sha256": "080768f7fe21a584d4da2483de83510ba4c5c8b25b0bb3278d48685ebf243d5f",
       "benchmarks": [
         "smoke"
       ],

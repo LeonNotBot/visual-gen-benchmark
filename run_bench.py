@@ -33,6 +33,8 @@ import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
+from bench_diagnostics import add_arguments, configure, emit
+
 ROOT = Path(__file__).resolve().parent
 SCRIPTS = Path(__file__).resolve().parent
 DEFAULT_FILE = ROOT / "testset" / "提示词测试集.xlsx"
@@ -78,12 +80,16 @@ def save_status(path, state, total, done, failed, cases, extra=None):
 # ---------- 调用子脚本 ----------
 def run_script(script, args, timeout=None, extra_env=None):
     """调用同目录下的子脚本，继承 stdout/stderr；返回退出码"""
-    cmd = [sys.executable, "-I", str(SCRIPTS / script)] + args
+    cmd = [sys.executable, "-I", "-u", str(SCRIPTS / script)] + args
     env = dict(os.environ, PYTHONIOENCODING="utf-8", **(extra_env or {}))
+    started = time.monotonic()
+    emit("STAGE_START", script=script, command=subprocess.list2cmdline(cmd), cwd=str(Path.cwd()))
     try:
         r = subprocess.run(cmd, env=env, timeout=timeout)
+        emit("STAGE_END", script=script, exit_code=r.returncode, elapsed_seconds=round(time.monotonic() - started, 3))
         return r.returncode
     except subprocess.TimeoutExpired:
+        emit("STAGE_TIMEOUT", script=script, elapsed_seconds=round(time.monotonic() - started, 3))
         return 4
 
 
@@ -322,6 +328,7 @@ def main():
     ap.add_argument("--skip-optimize", action="store_true", help="跳过优化步骤（优化过的行本来就会自动跳过）")
     ap.add_argument("--skip-generate", action="store_true", help="跳过生成步骤（用于只重新拆解）")
     ap.add_argument("--skip-decompose", action="store_true", help="跳过拆解步骤（用于只生成）")
+    add_arguments(ap)
     a = ap.parse_args()
 
     # Branch before model configuration, source edits, or any real subprocess.
@@ -334,6 +341,8 @@ def main():
         return
     if a.progress_file:
         ap.error("--progress-file 目前仅用于 --mock-test")
+    configure(a)
+    emit("BENCHMARK_START", command=subprocess.list2cmdline([sys.executable, *sys.argv]), cwd=str(Path.cwd()))
 
     path = Path(a.file).resolve()
     if not path.exists():
@@ -388,7 +397,11 @@ def main():
     # ── 阶段 1：优化（写回原测试集，所有模型共用同一份优化后提示词）──
     if not a.skip_optimize:
         log("\n── 阶段 1/3：优化提示词 ──")
-        run_script("auto_optimize.py", ["--file", str(src)] + ids_arg)
+        rc = run_script("auto_optimize.py", ["--file", str(src)] + ids_arg)
+        if rc:
+            save_status(status_path, "failed", total, 0, 0, cases,
+                        {"message": "提示词优化失败，未继续生成", "failed_stage": "optimize"})
+            sys.exit(rc)
 
     # ── 准备工作副本：第一次运行时从原测试集复制，续跑时沿用 ──
     if not work.exists():
@@ -404,10 +417,11 @@ def main():
     if not a.skip_generate:
         log("\n── 阶段 2/3：生成图片/视频 ──")
         env = {"EVAL_STATUS_FILE": str(status_path),
-               "EVAL_CRED_DIR": str(src.parent / "_凭据"),
+               "EVAL_CRED_DIR": os.environ.get("EVAL_CRED_DIR") or str(src.parent / "_凭据"),
                "EVAL_RUN_ID": out_dir.name}  # 幂等键包含运行ID，避免跨运行复用旧任务
         gen_args = file_arg + ids_arg + ["--timeout", str(a.timeout),
-                                         "--model-img", models["图片"], "--model-vid", models["视频"]]
+                                         "--model-img", models["图片"], "--model-vid", models["视频"],
+                                         "--interval", str(a.poll_interval)]
         rc = run_script("auto_generate.py", gen_args, extra_env=env)
         if rc == 4:
             log("\n⚠ 生成阶段超时，已有任务留在平台上。再次运行同一命令可续跑。")

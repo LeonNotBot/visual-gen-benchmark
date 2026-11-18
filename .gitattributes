@@ -1,0 +1,2 @@
+# Bridge checks script bytes against the configured SHA-256 on every platform.
+*.py text eol=lf
