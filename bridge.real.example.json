@@ -3,7 +3,7 @@
     {
       "id": "video-creator-real",
       "script": "bridge_run.py",
-      "sha256": "0c62796f84dc5a332135684d2d308bd3d848052f0e6d8d45d5e605fb26a7c748",
+      "sha256": "8213d3efe4fa582954968557cfb64400d164972650f944f7457e6643fe6b546a",
       "benchmarks": [
         "three-cases"
       ],

@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parent
 # The parent starts this script with -I; explicitly import trusted sibling code.
 sys.path.insert(0, str(ROOT))
 from bench_diagnostics import add_arguments, configure, emit, http_timeout, trace_http
+from benchmark_io import atomic_write_json
 DEFAULT_FILE = ROOT / "testset" / "提示词测试集.xlsx"
 MODELS_DIR_CANDIDATES = [Path(__file__).resolve().parent / "models"]   # 和脚本放在一起，scripts\ 和 eval-bench\ 都一样
 T2I_TEMPLATE_DEFAULT = Path(__file__).resolve().parent / "comfy_templates" / "qwen_image_2_1_t2i_api.json"
@@ -382,9 +383,7 @@ def load_jobs(path):
 
 
 def save_jobs(path, jobs):
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(jobs, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(path)
+    atomic_write_json(path, jobs)
 
 
 # ---------- 主流程 ----------
@@ -444,9 +443,7 @@ def main():
         obj["progress"] = {"total": total_count, "done": done_count, "failed": failed_count}
         obj["message"] = f"已完成 {done_count}/{total_count} 条" + (f"，失败 {failed_count} 条" if failed_count else "")
         obj["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(p)
+        atomic_write_json(p, obj)
 
     wb = openpyxl.load_workbook(path)
     ws = wb["提示词"] if "提示词" in wb.sheetnames else wb.active

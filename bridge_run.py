@@ -12,14 +12,13 @@ import uuid
 
 from run_bench import find_header, prepare_work_copy, read_testset
 from bench_diagnostics import add_arguments, configure, emit, timestamp
+from benchmark_io import atomic_write_json
 
 ROOT = Path(__file__).resolve().parent
 
 
 def write_json(path, value):
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    atomic_write_json(path, value)
 
 
 def progress(path, status, total, stage=None):

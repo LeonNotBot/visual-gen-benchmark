@@ -34,6 +34,7 @@ from datetime import datetime
 from pathlib import Path
 
 from bench_diagnostics import add_arguments, configure, emit
+from benchmark_io import atomic_write_json
 
 ROOT = Path(__file__).resolve().parent
 SCRIPTS = Path(__file__).resolve().parent
@@ -72,9 +73,7 @@ def save_status(path, state, total, done, failed, cases, extra=None):
         "cases": cases,
     })
     obj.update(extra or {})
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    atomic_write_json(path, obj)
 
 
 # ---------- 调用子脚本 ----------
