@@ -111,6 +111,8 @@ def main():
     ap.add_argument("--export", action="store_true", default=True,
                     help="拆完后立即导出评测记录（默认是；--no-export 只拆不导出）")
     ap.add_argument("--no-export", dest="export", action="store_false")
+    ap.add_argument("--append-to-latest", action="store_true",
+                    help="追加到评测记录目录里最新的评测记录文件，不新建（找不到时自动新建）")
     a = ap.parse_args()
     path = Path(a.file).resolve()
     only = {x.strip() for x in a.ids.split(",") if x.strip()}
@@ -136,12 +138,34 @@ def main():
     hr, col = header(ws)
 
     todo = []
+    # --append-to-latest 模式：读取最新评测记录里已有的用例ID，跳过已导出的，不依赖拆解状态
+    already_exported = set()
+    if getattr(a, "append_to_latest", False):
+        eval_dir = path.parent / "评测记录"
+        candidates = sorted(eval_dir.glob("评测记录_*.xlsx"),
+                            key=lambda f: f.stat().st_mtime, reverse=True) if eval_dir.exists() else []
+        candidates = [f for f in candidates if not (f.parent / f"~${f.name}").exists()]
+        if candidates:
+            try:
+                wb_ev = openpyxl.load_workbook(candidates[0], read_only=True)
+                ws_ev = wb_ev["②逐行评测记录"] if "②逐行评测记录" in wb_ev.sheetnames else None
+                if ws_ev:
+                    for ev_r in ws_ev.iter_rows(min_row=5, values_only=True):
+                        sid = ev_r[0]
+                        if sid and isinstance(sid, str) and "-" in sid:
+                            already_exported.add(sid.rsplit("-", 1)[0])
+                if already_exported:
+                    print(f"评测记录中已有 {len(already_exported)} 个用例，自动跳过：{', '.join(sorted(already_exported))}")
+            except Exception:
+                pass
     for r in range(hr + 1, ws.max_row + 1):
         row = {name: ws.cell(r, c).value for name, c in col.items()}
         row = {k: (v.strip() if isinstance(v, str) else v) for k, v in row.items()}
         st = str(row.get("拆解状态") or "").strip()
-        # 拆解只看提示词，不依赖生成结果：评测表属于测试集，所有模型共用一份
-        if row["用例ID"] and row.get("优化后提示词") and st != "已确认" and (not only or row["用例ID"] in only):
+        if row["用例ID"] and row.get("优化后提示词") \
+                and str(row["用例ID"]) not in already_exported \
+                and st != "已确认" \
+                and (not only or row["用例ID"] in only):
             todo.append((r, row))
     if not todo:
         print("没有要拆解的行（还没有「优化后提示词」，或者拆解状态已经是已确认）")
@@ -193,10 +217,24 @@ def main():
 
     if a.export and items:
         out_dir = path.parent / "评测记录"
+        # --append-to-latest：自动找最新的评测记录追加；找不到就新建
+        append_to = ""
+        if a.append_to_latest:
+            existing = sorted(out_dir.glob("评测记录_*.xlsx"), key=lambda f: f.stat().st_mtime, reverse=True)
+            existing = [f for f in existing if not (f.parent / f"~${f.name}").exists()]
+            if existing:
+                append_to = existing[0].name
+                print(f"追加到：{append_to}")
+            else:
+                print("未找到已有评测记录，新建文件")
         try:
             result = exp.export(items, rules, store.load_customs(), str(ROOT / "docs" / "评测体系_v1.5.xlsx"),
-                                str(out_dir), keep_examples=False, write_customs=True)
-            print(f"已导出评测记录：{result['file']}")
+                                str(out_dir), keep_examples=False, write_customs=True,
+                                append_to=append_to)
+            if result.get("appended"):
+                print(f"已追加到评测记录：{result['file']}（追加前备份到 备份/ 目录）")
+            else:
+                print(f"已导出评测记录：{result['file']}")
             print(f"⚠  这份评测表是草稿！请打开小助手逐条核对（红色的必须改），核对完把测试集里的「拆解状态」改成「已确认」，再交给测试人员。")
         except exp.ExportError as e:
             print(f"\n导出失败：{e}")
