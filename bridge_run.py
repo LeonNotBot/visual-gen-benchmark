@@ -84,14 +84,29 @@ def rating_workbook(source, destination, ids, *, clear_scores=False):
 def run(args, root=ROOT):
     configure(args)
     source = Path(args.file).resolve(strict=True)
-    ids = [s.strip() for s in args.ids.split(",") if s.strip()]
+    rows = read_testset(source, set(), set())
+    available_ids = [str(row["用例ID"]) for row in rows]
+    if not available_ids:
+        raise ValueError("测试集没有同时包含用例ID和初始提示词的有效题目")
+    if len(set(available_ids)) != len(available_ids):
+        raise ValueError("测试集存在重复用例ID，请先修正题库")
+    requested_ids = (args.ids or "").strip()
+    ids = [s.strip() for s in requested_ids.split(",") if s.strip()] if requested_ids else available_ids
     if not ids or len(set(ids)) != len(ids):
-        raise ValueError("必须通过 --ids 明确指定不重复的用例ID")
-    rows = read_testset(source, set(ids), set())
-    if len(rows) != len(ids) or {str(row["用例ID"]) for row in rows} != set(ids):
-        raise ValueError("所选用例不存在、缺少提示词，或用例ID重复")
-    if len(rows) > args.max_cases:
-        raise ValueError(f"当前接入配置最多允许 {args.max_cases} 道用例")
+        raise ValueError("--ids 必须包含不重复的有效用例ID")
+    if set(ids) - set(available_ids):
+        raise ValueError("所选用例不存在或缺少初始提示词：" + ",".join(sorted(set(ids) - set(available_ids))))
+    if args.max_cases is not None and (type(args.max_cases) is not int or args.max_cases < 1):
+        raise ValueError("--max-cases 必须为正整数，或留空使用全部有效题目数量")
+    case_limit = min(args.max_cases, len(available_ids)) if args.max_cases is not None else len(available_ids)
+    if not requested_ids:
+        # Without an explicit selection, a requested count takes the first N
+        # valid cases in workbook order. Never silently trim explicit IDs.
+        ids = ids[:case_limit]
+    if len(ids) > case_limit:
+        raise ValueError(f"本次选择 {len(ids)} 道，最多允许 {case_limit} 道；请调整 --ids 或 --max-cases")
+    emit("CASE_SELECTION", available=len(available_ids), selected=len(ids),
+         max_cases=case_limit, selection="ids" if requested_ids else "workbook_order")
     for mid in (args.model_img or "qwen_image_2_1", args.model_vid or "minimax_h3"):
         if Path(mid).name != mid or not (root / "models" / (mid + ".json")).is_file():
             raise ValueError("找不到对应模型配置：" + mid)
@@ -147,6 +162,8 @@ def run(args, root=ROOT):
         "source_file": str(source), "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
         "snapshot_file": str(snapshot), "snapshot_sha256": hashlib.sha256(snapshot.read_bytes()).hexdigest(),
         "selected_ids": ids, "generation_timeout_seconds": args.timeout,
+        "available_case_count": len(available_ids), "max_cases": args.max_cases,
+        "effective_max_cases": case_limit,
         "log_level": getattr(args, "log_level", "INFO")})
     (run_dir / "command.txt").write_text(f"cwd: {root}\n{command_text}\n", encoding="utf-8")
     emit("REAL_COMMAND", command=command_text, cwd=str(root))
@@ -190,6 +207,8 @@ def run(args, root=ROOT):
         raise ValueError(f"生成结束但缺少评测记录，检查 {run_dir}")
     rating_workbook(run_dir / "评测记录.xlsx", output / "评测记录.xlsx", ids)
     public = {"kind": "real_generation", "run_directory": str(run_dir), "selected_ids": ids,
+              "available_case_count": len(available_ids), "max_cases": args.max_cases,
+              "effective_max_cases": case_limit,
               "succeeded": succeeded, "failed": failed, "requires_review": True,
               "media_delivery": "windows_local", "cases": {}}
     for cid, case in cases.items():
@@ -214,16 +233,19 @@ def main():
     parser.add_argument("--file", default=str(ROOT / "testset" / "提示词测试集.xlsx"))
     parser.add_argument("--out", required=True)
     parser.add_argument("--progress-file", required=True)
-    parser.add_argument("--ids", required=True)
-    parser.add_argument("--max-cases", type=int, default=3)
+    parser.add_argument("--ids", default="", help="逗号分隔的用例ID；留空选择测试集全部有效题目")
+    parser.add_argument("--max-cases", type=int, default=None,
+                        help="本次数量上限；未填 --ids 时按 Excel 顺序取前 N 道，留空不额外限制")
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--model-img", default="")
     parser.add_argument("--model-vid", default="")
     parser.add_argument("--skip-optimize", action="store_true")
     add_arguments(parser)
     args = parser.parse_args()
-    if not 1 <= args.max_cases <= 3 or not 1 <= args.timeout <= 3600:
-        parser.error("本次真实接入最多3道用例，单次生成等待最多3600秒")
+    if args.max_cases is not None and args.max_cases < 1:
+        parser.error("--max-cases 必须为正整数；不传则使用测试集全部有效题目数量")
+    if not 1 <= args.timeout <= 3600:
+        parser.error("单次生成等待最多3600秒")
     try:
         run(args)
     except (ValueError, OSError) as exc:

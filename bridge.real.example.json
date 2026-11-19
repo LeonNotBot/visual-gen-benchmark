@@ -3,7 +3,7 @@
     {
       "id": "video-creator-real",
       "script": "bridge_run.py",
-      "sha256": "8213d3efe4fa582954968557cfb64400d164972650f944f7457e6643fe6b546a",
+      "sha256": "52871e8ef85f10474087371d7a9de74cad44a0e3eda6dcc7fc6c272cfc41dd06",
       "benchmarks": [
         "three-cases"
       ],
@@ -16,13 +16,12 @@
         "--out",
         "{output_dir}",
         "--progress-file",
-        "{progress_file}",
-        "--max-cases",
-        "3"
+        "{progress_file}"
       ],
       "argument_mode": "allowlist",
       "allowed_arguments": [
         "--ids",
+        "--max-cases",
         "--model-img",
         "--model-vid",
         "--timeout",
