@@ -121,8 +121,11 @@ def run(args, root=ROOT):
     progress_file.parent.mkdir(parents=True, exist_ok=True)
     if progress_file == source or progress_file == output / "report.md" or progress_file.exists():
         raise ValueError("进度文件不能覆盖输入或已有文件")
-    run_dir = root / "runs" / ("edison_" + uuid.uuid4().hex)
-    run_dir.mkdir(parents=True)
+    # New targets use the caller's --out for business artifacts and delivery.
+    # Legacy targets still receive a temporary delivery directory separately.
+    run_in_output = getattr(args, "run_in_output", False)
+    run_dir = output if run_in_output else root / "runs" / ("edison_" + uuid.uuid4().hex)
+    run_dir.mkdir(parents=True, exist_ok=run_in_output)
     print(f"真实运行目录：{run_dir}", flush=True)
     inputs = run_dir / "inputs"
     inputs.mkdir()
@@ -144,7 +147,8 @@ def run(args, root=ROOT):
     eval_inputs.mkdir()
     rating_workbook(candidates[-1], eval_inputs / candidates[-1].name, ids, clear_scores=True)
     command = [sys.executable, "-u", str(root / "run_bench.py"), "--file", str(snapshot),
-               "--out", str(run_dir), "--ids", ",".join(ids), "--timeout", str(args.timeout)]
+               "--out", str(args.out) if run_in_output else str(run_dir),
+               "--ids", ",".join(ids), "--timeout", str(args.timeout)]
     for option, value in (("--model-img", args.model_img), ("--model-vid", args.model_vid)):
         if value:
             command.extend([option, value])
@@ -232,6 +236,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--file", default=str(ROOT / "testset" / "提示词测试集.xlsx"))
     parser.add_argument("--out", required=True)
+    parser.add_argument("--run-in-output", action="store_true",
+                        help="使用调用方 --out 作为业务运行目录，不另建 edison_随机目录")
     parser.add_argument("--progress-file", required=True)
     parser.add_argument("--ids", default="", help="逗号分隔的用例ID；留空选择测试集全部有效题目")
     parser.add_argument("--max-cases", type=int, default=None,

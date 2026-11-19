@@ -3,7 +3,7 @@
     {
       "id": "video-creator-real",
       "script": "bridge_run.py",
-      "sha256": "52871e8ef85f10474087371d7a9de74cad44a0e3eda6dcc7fc6c272cfc41dd06",
+      "sha256": "75e74cfefc4e2a022d3267ff522ed750891b336db982b7d309d61afadb62ae03",
       "benchmarks": [
         "three-cases"
       ],
@@ -11,15 +11,14 @@
       "report_file": "report.md",
       "timeout_seconds": 7200,
       "argument_template": [
-        "--file",
-        "testset/提示词测试集.xlsx",
-        "--out",
-        "{output_dir}",
+        "--run-in-output",
         "--progress-file",
         "{progress_file}"
       ],
       "argument_mode": "allowlist",
       "allowed_arguments": [
+        "--out",
+        "--file",
         "--ids",
         "--max-cases",
         "--model-img",
@@ -33,7 +32,13 @@
       "allowed_switches": [
         "--skip-optimize"
       ],
-      "working_dir": "."
+      "working_dir": ".",
+      "output_directory_argument": "--out",
+      "report_files": [
+        "report.md",
+        "评测记录.xlsx",
+        "run.json"
+      ]
     }
   ]
 }
